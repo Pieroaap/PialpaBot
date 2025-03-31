@@ -2,12 +2,13 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { message } from 'telegraf/filters';
-import { Markup } from 'telegraf/markup';
+import axios from 'axios';
+
 
 dotenv.config();
 
 @Injectable()
-export class TelegramService implements OnModuleInit {
+export class TelegramService {
   private bot: Telegraf;
 
   constructor() {
@@ -16,48 +17,33 @@ export class TelegramService implements OnModuleInit {
       throw new Error('⚠️ Error: No se encontró el token');
     }
     this.bot = new Telegraf(token);
+    this.setupBot();
   }
 
-  onModuleInit(): any {
-    //Mensaje Inicial
-    this.bot.start((ctx) => {
-      ctx.reply(
-        '¡Hola! Soy PialpaBot 🤖. ¿En qué puedo ayudarte?',
-        {
-          reply_markup: {
-            keyboard: [['ℹ️ Información', '📞 Contacto']],
-            resize_keyboard: true,
-          },
-        }
-      );
+  private setupBot() {
+    this.bot.on(message('text'), async (ctx) => {
+      const userMessage = ctx.message.text;
+      const rasaResponse = await this.sendToRasa(userMessage, ctx.chat.id);
+      ctx.reply(rasaResponse);
     });
 
-    this.bot.command('help', (ctx) => {
-      ctx.reply(
-        '📌 Puedes usar estos comandos:\n/start - Iniciar bot\n/help - Ver ayuda\n/info - Información sobre el bot',
-      );
-    });
-
-    //Comandos
-    this.bot.hears('ℹ️ Información', (ctx) => {
-      ctx.reply(
-        '🤖 Soy un bot creado como tarea del profesor Motta 😁.',
-      );
-    });
-    this.bot.hears('📞 Contacto', (ctx) => {
-      ctx.reply(
-        'Puedes comunicarte con el profesor Motta en linkedin.com/marcelocoronadoch 😊',
-      );
-    });
-
-    //Rececpción de Texto, Stickers
-    this.bot.on(message('text'), (ctx) =>
-      ctx.reply(`Dijiste: ${ctx.message.text}`),
-    );
-    this.bot.on(message('sticker'), (ctx) => ctx.reply('¡Bonito Sticker!'));
-
-    // Desplegar bot
     this.bot.launch();
-    console.log('Pialpa Bot iniciado correctamente 🤖');
+  }
+
+  private async sendToRasa(message: string, senderId : number): Promise<string> {
+    try {
+      const response = await axios.post('http://localhost:5005/webhooks/rest/webhook',{
+        sender: senderId.toString(),
+        message: message,
+      });
+
+      if (response.data.length > 0) {
+        return response.data[0].text || 'Lo siento, no entendí.';
+      }
+      return 'Lo siento, no tengo una respuesta para eso';
+    }catch(err) {
+      console.error('Error al conectar con Rasa: ',err)
+      return 'Hubo un problema al conectar con el servidor';
+    }
   }
 }
