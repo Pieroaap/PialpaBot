@@ -1,8 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { message } from 'telegraf/filters';
 import axios from 'axios';
+import { GeminiService } from '../gemini/gemini.service';
 
 
 dotenv.config();
@@ -10,8 +11,9 @@ dotenv.config();
 @Injectable()
 export class TelegramService {
   private bot: Telegraf;
+  private modoIA: 'rasa' | 'gemini' = 'rasa';
 
-  constructor() {
+  constructor(private readonly  geminiService: GeminiService) {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) {
       throw new Error('⚠️ Error: No se encontró el token');
@@ -21,10 +23,22 @@ export class TelegramService {
   }
 
   private setupBot() {
+    this.bot.command('modo', async (ctx) => {
+      this.modoIA = this.modoIA === 'rasa' ? 'gemini' : 'rasa';
+      ctx.reply(`🔄 Modo cambiado a: ${this.modoIA.toUpperCase()}`);
+    });
+
     this.bot.on(message('text'), async (ctx) => {
       const userMessage = ctx.message.text;
-      const rasaResponse = await this.sendToRasa(userMessage, ctx.chat.id);
-      ctx.reply(rasaResponse);
+      let responseText = 'No entendí tu consulta.';
+
+      if (this.modoIA === 'rasa') {
+        responseText = await this.sendToRasa(userMessage, ctx.chat.id);
+      }else {
+        responseText = await this.geminiService.obtenerRespuesta(userMessage);
+      }
+
+      ctx.reply(responseText);
     });
 
     this.bot.launch();
